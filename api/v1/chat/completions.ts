@@ -28,6 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: { message: 'Invalid JSON body', type: 'invalid_request_error' } });
   }
 
+  const requestBody = (body ?? {}) as { stream?: boolean };
+
   const response = {
     id: generateId(),
     object: 'chat.completion',
@@ -49,6 +51,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       total_tokens: 0,
     },
   };
+
+  if (requestBody.stream) {
+    res.status(200);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const chunk = {
+      id: response.id,
+      object: 'chat.completion.chunk',
+      created: response.created,
+      model: response.model,
+      choices: [
+        {
+          index: 0,
+          delta: {
+            role: 'assistant',
+            content: response.choices[0].message.content,
+          },
+          finish_reason: 'stop',
+        },
+      ],
+    };
+
+    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    res.write('data: [DONE]\n\n');
+    return res.end();
+  }
 
   return res.status(200).json(response);
 }
